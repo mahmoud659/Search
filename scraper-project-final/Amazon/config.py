@@ -3,6 +3,8 @@
 # كل الإعدادات الثابتة الخاصة بسكرابر أمازون في مكان واحد
 # ============================================================
 
+from pathlib import Path
+
 AMAZON_DOMAIN = "https://www.amazon.sa"
 
 # --------------------------------------------------------------
@@ -58,14 +60,21 @@ MY_PRICES = {
 # --------------------------------------------------------------
 # ملفات الإخراج - داخل فولدر Amazon نفسه عشان يفضل كل حاجة بتاعت
 # أمازون منظمة مع بعض ومنفصلة عن نون
+#
+# ⚠️ مهم: المسارات دي لازم تكون absolute (مبنية على مكان ملف
+# config.py نفسه) مش relative، عشان تشتغل صح بغض النظر عن الـ
+# working directory اللي بايثون شغال منه (ده اللي كان بيسبب مشكلة
+# "الملف موجود بس مش بيتقرا" على Streamlit Cloud).
 # --------------------------------------------------------------
-OUTPUT_JSON_FILE = "Amazon/all_offers.json"
-OUTPUT_EXCEL_FILE = "Amazon/all_offers.xlsx"
+_AMAZON_DIR = Path(__file__).resolve().parent
+
+OUTPUT_JSON_FILE = str(_AMAZON_DIR / "all_offers.json")
+OUTPUT_EXCEL_FILE = str(_AMAZON_DIR / "all_offers.xlsx")
 
 # ملف "آخر تحديث فقط" - بيتكتب فيه أحدث سحب لكل منتج بس، وبيتمسح منه أي
 # صف قديم لنفس الـ ASIN تلقائيًا. ده اللي Streamlit المفروض يقرا منه
 # عشان الداشبورد يعرض آخر بيانات بس من غير خلط قديم/جديد.
-OUTPUT_LAST_DATA_FILE = "Amazon/last_data.xlsx"
+OUTPUT_LAST_DATA_FILE = str(_AMAZON_DIR / "last_data.xlsx")
 
 HEADLESS = True   # True للتشغيل التلقائي/الدوري. خليه False بس وانت بتصحح مشكلة.
 

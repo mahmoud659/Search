@@ -15,8 +15,12 @@ import os
 import pandas as pd
 import streamlit as st
 
-from Amazon.amazon import scrape_sellers
-from Amazon.config import MY_PRICES, MY_SELLER_NAME
+# ملاحظة: import Amazon.config مش هيفشل حتى لو playwright مش متثبت،
+# لأن config.py مفيهوش أي استيراد لـ playwright. أما scrape_sellers
+# (اللي بيحتاج playwright فعليًا) بنستورده lazy جوه rescan_now() بس،
+# عشان لو playwright فشل يتثبت على السيرفر، الداشبورد (عرض المنتجات)
+# يفضل شغال عادي وميزة "ابحث الآن" بس هي اللي هتتعطل برسالة واضحة.
+from Amazon.config import MY_PRICES, MY_SELLER_NAME, OUTPUT_LAST_DATA_FILE
 from auth import check_login, logout_button
 from playwright_setup import ensure_playwright_browser
 from scheduler import start_background_scheduler
@@ -35,14 +39,26 @@ if not check_login():
     st.stop()
 
 # -------- تجهيز متصفح Playwright (لازم قبل أي سكرابينج) --------
-ensure_playwright_browser()
+# لو فشلت (السيرفر مش عنده الموارد الكافية مثلاً)، بنكمل عادي - الداشبورد
+# مش محتاج playwright، بس ميزة "ابحث الآن" هتتعطل وقتها (شايف رسالة تحت)
+try:
+    ensure_playwright_browser()
+except Exception as e:
+    st.sidebar.warning(f"⚠️ تعذر تجهيز متصفح السكرابر: {e}")
 
 # -------- الجدولة التلقائية كل 12 ساعة (مرة واحدة بس لكل عملية) --------
-start_background_scheduler()
+# دي كمان محتاجة playwright، فلو فشلت مش هتوقف باقي التطبيق
+try:
+    start_background_scheduler()
+except Exception as e:
+    st.sidebar.warning(f"⚠️ الجدولة التلقائية معطّلة: {e}")
 
 
 # آخر تحديث فقط لكل منتج (مش الأرشيف التاريخي all_offers.xlsx)
-DEFAULT_EXCEL_PATH = "Amazon/last_data.xlsx"
+# بنستخدم نفس القيمة بالظبط اللي السكرابر بيكتب فيها (من Amazon/config.py)
+# عشان نضمن الاتنين بيشاوروا على نفس الملف دايمًا، مهما كان الـ working
+# directory وقت التشغيل.
+DEFAULT_EXCEL_PATH = OUTPUT_LAST_DATA_FILE
 PLACEHOLDER_IMAGE = "https://placehold.co/400x400?text=No+Image"
 
 # لون واحد بس بيتكرر في كل الصفحة (السعر، التمييز في الجدول، الكروت)
@@ -233,6 +249,15 @@ def rescan_now(asin):
     ويحدّث last_data.xlsx بأحدث نتيجة. بياخد وقت (10-30 ثانية) لأنه
     بيفتح متصفح فعلي على أمازون."""
     with st.spinner(f"بيتم البحث عن أحدث الأسعار لـ {asin} الآن..."):
+        try:
+            from Amazon.amazon import scrape_sellers  # lazy import - شايف السبب فوق
+        except Exception as e:
+            st.error(
+                f"ميزة البحث الفوري مش متاحة دلوقتي — متصفح السكرابر (Playwright) "
+                f"مش متثبت صح على السيرفر. ({e})"
+            )
+            return
+
         try:
             scrape_sellers(
                 asin=asin,

@@ -17,14 +17,12 @@
 from datetime import datetime
 
 import streamlit as st
-from apscheduler.schedulers.background import BackgroundScheduler
-
-from Amazon.amazon import run_all as run_amazon_scrape
 
 
 def _run_and_log():
     print(f"[SCHEDULER] بدء تشغيل دوري تلقائي: {datetime.now().isoformat()}")
     try:
+        from Amazon.amazon import run_all as run_amazon_scrape  # lazy import - شايف السبب في streamlit_app.py
         run_amazon_scrape()
     except Exception as e:
         print(f"[SCHEDULER] فشلت التشغيلة الدورية: {e}")
@@ -36,7 +34,16 @@ def start_background_scheduler():
     @st.cache_resource بتضمن إن الجدولة تتعمل مرة واحدة بس لكل عملية
     Streamlit (مش مرة لكل مستخدم أو كل rerun)، وإلا كنا هنلاقي أكتر
     من scheduler شغال في نفس الوقت.
+
+    لو apscheduler أو playwright مش متثبتين صح، الدالة بترجع None
+    والداشبورد يفضل شغال عادي من غير الجدولة التلقائية.
     """
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+    except Exception as e:
+        print(f"[SCHEDULER] apscheduler مش متاحة، الجدولة التلقائية معطّلة: {e}")
+        return None
+
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(
         _run_and_log,
