@@ -78,6 +78,17 @@ OUTPUT_LAST_DATA_FILE = str(_AMAZON_DIR / "last_data.xlsx")
 
 HEADLESS = True   # True للتشغيل التلقائي/الدوري. خليه False بس وانت بتصحح مشكلة.
 
+# فلاجات ضرورية لتشغيل Chromium جوه container (زي Streamlit Cloud) اللي
+# مفيهوش صلاحيات sandbox الطبيعية بتاعة المتصفح. من غيرهم Chromium
+# بيكرش فورًا وقت اللانش (ده سبب شائع جدًا لـ "شغال لوكال، مش شغال
+# على السيرفر"). محليًا مش هتأثر بحاجة، الفلاجات دي آمنة تتفعل دايمًا.
+BROWSER_LAUNCH_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+]
+
 MAX_LOAD_ROUNDS = 40   # قللناها من 100 لتسريع كل تشغيلة (كانت ممكن تاخد لحد 6-7 دقايق)
 MAX_NO_CHANGE = 5
 

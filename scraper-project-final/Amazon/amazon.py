@@ -13,6 +13,7 @@ from . import parser
 from .config import (
     AMAZON_DOMAIN, ASINS, MY_SELLER_NAME, MY_PRICES,
     OUTPUT_JSON_FILE, OUTPUT_EXCEL_FILE, OUTPUT_LAST_DATA_FILE, HEADLESS,
+    BROWSER_LAUNCH_ARGS,
 )
 from .excel_writer import append_to_json_file, append_to_excel_file, write_last_data_file
 
@@ -108,7 +109,9 @@ def scrape_sellers(asin, my_price=None, my_seller_name=None):
     product_title = product_description = product_image_url = None
 
     with sync_playwright() as p:
-        pw_browser = p.chromium.launch(headless=HEADLESS)
+        pw_browser = p.chromium.launch(
+            headless=HEADLESS, args=BROWSER_LAUNCH_ARGS, chromium_sandbox=False,
+        )
         context = pw_browser.new_context(
             locale="ar-SA", timezone_id="Asia/Riyadh",
             viewport={"width": 1440, "height": 900}

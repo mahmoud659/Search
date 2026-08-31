@@ -247,16 +247,22 @@ if "selected_asin" not in st.session_state:
 def rescan_now(asin):
     """بيشغّل سحب حقيقي فوري (Playwright) لمنتج واحد بس دلوقتي،
     ويحدّث last_data.xlsx بأحدث نتيجة. بياخد وقت (10-30 ثانية) لأنه
-    بيفتح متصفح فعلي على أمازون."""
+    بيفتح متصفح فعلي على أمازون.
+
+    ملاحظة: مبنعرضش الرسالة (نجاح/فشل) هنا مباشرة، لأن st.rerun() بعدها
+    بيمسح الصفحة فورًا قبل ما المستخدم يلحق يقراها (كانت بتظهر حمرا
+    وتختفي بسرعة). بدل كده بنحفظها في session_state وبتتعرض بعد الـ
+    rerun في أول الصفحة، وتفضل ظاهرة لحد ما المستخدم يتفاعل تاني."""
     with st.spinner(f"بيتم البحث عن أحدث الأسعار لـ {asin} الآن..."):
         try:
             from Amazon.amazon import scrape_sellers  # lazy import - شايف السبب فوق
         except Exception as e:
-            st.error(
+            st.session_state.rescan_message = (
+                "error",
                 f"ميزة البحث الفوري مش متاحة دلوقتي — متصفح السكرابر (Playwright) "
-                f"مش متثبت صح على السيرفر. ({e})"
+                f"مش متثبت صح على السيرفر. ({e})",
             )
-            return
+            st.rerun()
 
         try:
             scrape_sellers(
@@ -265,9 +271,9 @@ def rescan_now(asin):
                 my_seller_name=MY_SELLER_NAME,
             )
             st.cache_data.clear()
-            st.success("تم تحديث السعر بنجاح!")
+            st.session_state.rescan_message = ("success", f"تم تحديث سعر {asin} بنجاح!")
         except Exception as e:
-            st.error(f"تعذر تحديث السعر دلوقتي: {e}")
+            st.session_state.rescan_message = ("error", f"تعذر تحديث السعر دلوقتي: {e}")
     st.rerun()
 
 
@@ -397,6 +403,15 @@ def show_product_grid(products_to_show):
 # التشغيل الفعلي للصفحة
 # --------------------------------------------------------------
 st.title("🛒 مقارنة أسعار المنتجات")
+
+# -------- رسالة نتيجة "ابحث عن أحدث الأسعار الآن" (لو موجودة) --------
+# بتتعرض هنا بعد الـ rerun (مش قبله) عشان تفضل ظاهرة وميتمسحش فورًا
+if "rescan_message" in st.session_state:
+    msg_type, msg_text = st.session_state.pop("rescan_message")
+    if msg_type == "success":
+        st.success(msg_text)
+    else:
+        st.error(msg_text)
 
 if st.session_state.selected_asin:
     show_product_detail(st.session_state.selected_asin)
