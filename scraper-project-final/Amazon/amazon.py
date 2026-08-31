@@ -6,8 +6,6 @@
 
 from datetime import datetime
 
-from playwright.sync_api import sync_playwright
-
 from . import browser
 from . import parser
 from .config import (
@@ -94,19 +92,12 @@ def analyze_my_position(offers, my_price, my_seller_name):
 # MAIN SCRAPE (لمنتج واحد)
 # ============================================================
 
-def scrape_sellers(asin, my_price=None, my_seller_name=None):
-    offer_url = f"{AMAZON_DOMAIN}/gp/offer-listing/{asin}?condition=NEW"
-
-    print("=" * 70)
-    print("AMAZON CURRENT OFFER + OTHER AMAZON SELLERS")
-    print("=" * 70)
-    print(f"\n[+] ASIN: {asin}")
-    print("[+] Target: CURRENT OFFER + OTHER AMAZON SELLERS (AOD)")
-    print(f"[+] URL: {offer_url}")
-
-    current_offer = None
-    aod_offers = []
-    product_title = product_description = product_image_url = None
+def _scrape_via_playwright(asin, offer_url):
+    """المحاولة الأساسية (المفضّلة): متصفح حقيقي عن طريق Playwright.
+    بيرجع (current_offer, aod_offers, product_title, product_description,
+    product_image_url) أو بيرمي Exception لو المتصفح فشل يفتح خالص
+    (أو حتى لو مكتبة playwright نفسها مش متثبتة)."""
+    from playwright.sync_api import sync_playwright  # lazy import عمدًا
 
     with sync_playwright() as p:
         pw_browser = p.chromium.launch(
@@ -127,13 +118,13 @@ def scrape_sellers(asin, my_price=None, my_seller_name=None):
         page.wait_for_timeout(5000)
         print("[+] Current URL:", page.url)
 
-        # بيانات المنتج الأساسي بس (عنوان + وصف + صورة) - مرة واحدة
         product_title, product_description, product_image_url = browser.extract_product_info(page)
         print(f"[+] Product title: {product_title}")
 
         current_offer_html = browser.get_current_offer_html_candidates(page)
         current_offer = parser.parse_current_offer(current_offer_html, page.url)
 
+        aod_offers = []
         if browser.wait_for_aod_section(page):
             print("[+] AOD section detected.")
             snapshots = browser.load_all_aod_offers(page)
@@ -143,6 +134,50 @@ def scrape_sellers(asin, my_price=None, my_seller_name=None):
             print("[!] AOD section not found.")
 
         pw_browser.close()
+
+    return current_offer, aod_offers, product_title, product_description, product_image_url
+
+
+def _scrape_via_http_fallback(asin):
+    """
+    خطة بديلة لما المتصفح مش شغال خالص على السيرفر (زي مشكلة مكتبات
+    النظام الناقصة اللي بتتكرر على بعض بيئات الاستضافة). بتجيب بيانات
+    أقل دقة (عدد عروض أقل غالبًا، لأن أمازون بتحمّل باقي العروض بجافاسكريبت)
+    لكن أفضل بكتير من صفر بيانات.
+    """
+    from . import http_fetch
+
+    print("[!] Playwright/Chromium مش شغال — بجرب طريقة HTTP البديلة (بدون متصفح)...")
+    http_fetch._warm_up()
+    product_title, product_description, product_image_url = http_fetch.fetch_product_info(asin)
+    product_url = f"{AMAZON_DOMAIN}/dp/{asin}"
+    current_offer, aod_offers, _ = http_fetch.fetch_offer_data(asin, referer=product_url)
+    print(f"[+] (HTTP fallback) Product title: {product_title}")
+    print(f"[+] (HTTP fallback) AOD offers kept: {len(aod_offers)}")
+    return current_offer, aod_offers, product_title, product_description, product_image_url
+
+
+def scrape_sellers(asin, my_price=None, my_seller_name=None):
+    offer_url = f"{AMAZON_DOMAIN}/gp/offer-listing/{asin}?condition=NEW"
+
+    print("=" * 70)
+    print("AMAZON CURRENT OFFER + OTHER AMAZON SELLERS")
+    print("=" * 70)
+    print(f"\n[+] ASIN: {asin}")
+    print("[+] Target: CURRENT OFFER + OTHER AMAZON SELLERS (AOD)")
+    print(f"[+] URL: {offer_url}")
+
+    try:
+        (current_offer, aod_offers, product_title,
+         product_description, product_image_url) = _scrape_via_playwright(asin, offer_url)
+    except Exception as e:
+        print(f"[!] Playwright فشل ({e})")
+        try:
+            (current_offer, aod_offers, product_title,
+             product_description, product_image_url) = _scrape_via_http_fallback(asin)
+        except Exception as fallback_error:
+            print(f"[!!!] الطريقة البديلة (HTTP) فشلت برضو: {fallback_error}")
+            raise
 
     offers = parser.build_final_offers(current_offer, aod_offers)
     offers.sort(key=lambda x: x["total"] if x.get("total") is not None else float("inf"))

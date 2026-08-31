@@ -7,8 +7,6 @@
 
 import re
 
-from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-
 from .config import MAX_LOAD_ROUNDS, MAX_NO_CHANGE
 from .utils import clean_text, normalize_digits
 
@@ -201,6 +199,7 @@ def get_current_offer_html_candidates(page):
 
 def wait_for_aod_section(page, timeout=20000):
     """بيرجع True لو لقى قسم 'بائعين تانيين' جوه الصفحة."""
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError  # lazy import عمدًا
     try:
         page.locator("#aod-offer").first.wait_for(state="attached", timeout=timeout)
         return True

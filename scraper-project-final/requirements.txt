@@ -4,3 +4,4 @@ openpyxl
 beautifulsoup4
 playwright
 apscheduler
+requests
