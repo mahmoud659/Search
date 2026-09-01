@@ -259,12 +259,30 @@ def write_last_data_file(new_offer_records, product_record, path, my_seller_name
     my_offer_fill = PatternFill("solid", fgColor="BDD7EE")
     hyperlink_font = Font(color="0563C1", underline="single")
 
-    asins_in_batch = {o.get("asin") for o in new_offer_records if o.get("asin")}
+    # مهم: بنفصل مجموعة الـ ASINs المستخدمة لتصفية كل شيت عن التانية.
+    # لو استخدمنا نفس المجموعة الموحّدة للاتنين، أي رن (rescan) بيرجع
+    # منتج من غير عروض (offers فاضية) أو من غير بيانات منتج (title/desc
+    # فاضيين) كان بيمسح الصفوف القديمة الصحيحة ويستبدلها بفراغ - وده
+    # اللي كان بيسبب اختفاء العروض أو ظهور "-" بدل اسم المنتج بعد أي
+    # rescan جزئي الفشل.
+    offers_asins_in_batch = {o.get("asin") for o in new_offer_records if o.get("asin")}
+    product_asins_in_batch = set()
     if product_record and product_record.get("asin"):
-        asins_in_batch.add(product_record["asin"])
+        product_asins_in_batch.add(product_record["asin"])
 
-    kept_offer_rows = [r for r in _read_existing_rows(path, "Offers") if r[0] not in asins_in_batch]
-    kept_product_rows = [r for r in _read_existing_rows(path, "Products") if r[0] not in asins_in_batch]
+    existing_offer_rows = _read_existing_rows(path, "Offers")
+    existing_product_rows = _read_existing_rows(path, "Products")
+
+    kept_offer_rows = [r for r in existing_offer_rows if r[0] not in offers_asins_in_batch]
+    kept_product_rows = [r for r in existing_product_rows if r[0] not in product_asins_in_batch]
+
+    # لو الـ rescan رجع بيانات منتج ناقصة (مثلاً فشل يجيب العنوان/الوصف/
+    # الصورة) بس كان فيه صف قديم لنفس الـ ASIN بقيم حقيقية، نحافظ على
+    # القيم القديمة بدل ما نمسحها بـ "-"
+    old_product_by_asin = {
+        row[0]: row for row in existing_product_rows
+        if row[0] in product_asins_in_batch
+    }
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     wb = Workbook()
@@ -339,10 +357,22 @@ def write_last_data_file(new_offer_records, product_record, path, my_seller_name
         write_product_row(row_idx, list(row))
         row_idx += 1
     if product_record:
+        old_row = old_product_by_asin.get(product_record.get("asin"))
+
+        def _value_or_fallback(new_value, old_index):
+            """لو القيمة الجديدة فاضية بس فيه قيمة قديمة حقيقية (مش '-')، استخدم القديمة."""
+            if new_value:
+                return new_value
+            if old_row and len(old_row) > old_index and old_row[old_index] and old_row[old_index] != "-":
+                return old_row[old_index]
+            return new_value
+
         values = [
-            product_record.get("asin"), product_record.get("title"),
-            product_record.get("description"), product_record.get("image_url"),
-            product_record.get("product_url"),
+            product_record.get("asin"),
+            _value_or_fallback(product_record.get("title"), 1),
+            _value_or_fallback(product_record.get("description"), 2),
+            _value_or_fallback(product_record.get("image_url"), 3),
+            _value_or_fallback(product_record.get("product_url"), 4),
         ]
         write_product_row(row_idx, values)
         row_idx += 1
